@@ -1,6 +1,72 @@
 ---
-- name: "Instalar dependências"
-  ansible.builtin.import_playbook: install_deps.yml
+- name: "Deploy e Configuração de VMs no Proxmox"
+  hosts: localhost
+  gather_facts: false
 
-- name: "Executar o deploy das VMs"
-  ansible.builtin.import_playbook: run_deployment.yml
+  # Esta seção garante que as dependências sejam instaladas ANTES de qualquer outra coisa.
+  pre_tasks:
+    - name: "Garantir que as coleções Ansible Galaxy estejam instaladas"
+      ansible.builtin.command: "ansible-galaxy collection install -r collections/requirements.yml"
+      changed_when: false
+
+    - name: "Garantir que as bibliotecas Python estejam instaladas"
+      ansible.builtin.command: "pip install -r requirements.txt"
+      changed_when: false
+
+    - name: "Descobrir o próximo VMID livre"
+      community.general.proxmox_facts:
+        api_user: "{{ lookup('env', 'proxmox_api_user') }}"
+        api_password: "{{ lookup('env', 'proxmox_api_secret') }}"
+        api_host: "{{ lookup('env', 'proxmox_api_host') }}"
+      register: proxmox_info
+
+    - name: "Calcular o próximo VMID a partir de 700"
+      ansible.builtin.set_fact:
+        vmid_range_start: 700
+        existing_vmids: "{{ proxmox_info.proxmox_vms | map(attribute='vmid') | list }}"
+        next_vmid: "{{ (existing_vmids | select('>=', vmid_range_start) | max | default(vmid_range_start - 1)) + 1 }}"
+
+  tasks:
+    - name: "1. Clonar, configurar e ligar as VMs em paralelo"
+      community.general.proxmox_kvm:
+        api_user: "{{ lookup('env', 'proxmox_api_user') }}"
+        api_password: "{{ lookup('env', 'proxmox_api_secret') }}"
+        api_host: "{{ lookup('env', 'proxmox_api_host') }}"
+        node: "pve-main" # Mude se o nome do seu node for outro
+        
+        vmid: "{{ next_vmid | int + item }}"
+        name: "{{ vm_name_prefix }}-{{ item + 1 }}"
+        clone: "{{ template_name }}"
+        
+        cores: 2
+        memory: 2048
+        
+        state: started
+        timeout: 300
+      
+      loop: "{{ range(0, vm_count | int) | list }}"
+      register: vm_creation_results
+
+    - name: "2. Adicionar novas VMs ao inventário em memória para configuração"
+      ansible.builtin.add_host:
+        name: "{{ item.invocation.module_args.name }}"
+        groups: novas_vms
+      loop: "{{ vm_creation_results.results }}"
+      loop_control:
+        label: "{{ item.invocation.module_args.name }}"
+
+# --- SEGUNDA PARTE: CONFIGURAÇÃO INTERNA DAS VMS ---
+- name: "Configurar as VMs recém-criadas"
+  hosts: novas_vms
+  gather_facts: no
+  
+  tasks:
+    - name: "3. Aguardar o SSH estar disponível nas novas VMs"
+      ansible.builtin.wait_for_connection:
+        delay: 10
+        timeout: 300
+
+    - name: "4. Mudar o hostname dentro de cada VM"
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+      become: true
