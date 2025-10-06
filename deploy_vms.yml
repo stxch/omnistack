@@ -1,69 +1,48 @@
 ---
-- name: Deploy de Novas VMs no Proxmox
+- name: "Deploy de Novas VMs no Proxmox"
   hosts: localhost
-  gather_facts: no
-  vars_prompt:
-    - name: "vmid_start"
-      prompt: "Digite o ID inicial para as novas VMs"
-      private: no
-      default: "200"
-    - name: "vm_count"
-      prompt: "Quantas VMs você quer criar?"
-      private: no
-      default: "1"
-    - name: "vm_name_prefix"
-      prompt: "Qual o prefixo para o nome das VMs (ex: web-server)?"
-      private: no
-      default: "vm-test"
-    - name: "template_name"
-      prompt: "Qual o nome do template a ser clonado?"
-      private: no
-      default: "ubuntu-2204-template" # Mude para o nome do seu template
+  gather_facts: false
 
   tasks:
     - name: "1. Clonar, configurar e ligar as VMs em paralelo"
-      # Este é o módulo principal. Ele vai clonar o template.
       community.general.proxmox_kvm:
-        api_user: "{{ proxmox_api_user }}"     # Será uma variável segura no Semaphore
-        api_password: "{{ proxmox_api_secret }}" # Será uma variável segura no Semaphore
-        api_host: "{{ proxmox_api_host }}"     # Será uma variável de inventário no Semaphore
-        node: "pve-main" # Mude para o nome do seu node Proxmox
+        api_user: "{{ lookup('env', 'proxmox_api_user') }}"
+        api_password: "{{ lookup('env', 'proxmox_api_secret') }}"
+        api_host: "{{ proxmox_api_host }}" 
+        node: "pve-main"
         
-        # Lógica do Loop para criar múltiplas VMs
         vmid: "{{ vmid_start | int + item }}"
         name: "{{ vm_name_prefix }}-{{ item + 1 }}"
         clone: "{{ template_name }}"
         
-        # Configurações de hardware
         cores: 2
         memory: 2048 # em MB
         
-        # Ações
-        state: started # Garante que a VM seja ligada após a criação/configuração
+        state: started
         timeout: 300
+      
       loop: "{{ range(0, vm_count | int) | list }}"
       register: vm_creation_results
 
-    - name: "2. Aguardar a VM obter um IP e o SSH estar disponível"
-      # Esta task espera a VM ficar acessível via SSH. Essencial para o próximo passo.
-      wait_for_connection:
+    - name: "2. Adicionar novas VMs ao inventário em memória"
+      ansible.builtin.add_host:
+        name: "{{ item.invocation.module_args.name }}"
+        groups: novas_vms
+      loop: "{{ vm_creation_results.results }}"
+      loop_control:
+        label: "{{ item.invocation.module_args.name }}"
+
+- name: "Configurar as VMs recém-criadas"
+  hosts: novas_vms
+  gather_facts: no
+  
+  tasks:
+    - name: "3. Aguardar o SSH estar disponível"
+      ansible.builtin.wait_for_connection:
         delay: 10
         timeout: 300
-      delegate_to: "{{ item.invocation.module_args.name }}" # Delega a execução para o nome da nova VM
-      loop: "{{ vm_creation_results.results }}"
-      loop_control:
-        label: "Aguardando SSH em {{ item.invocation.module_args.name }}"
 
-    - name: "3. Mudar o hostname dentro da VM"
-      # Agora que a VM está acessível, conectamos nela e mudamos o hostname
-      hostname:
-        name: "{{ item.invocation.module_args.name }}"
-      delegate_to: "{{ item.invocation.module_args.name }}" # Delega a execução para o nome da nova VM
-      loop: "{{ vm_creation_results.results }}"
-      loop_control:
-        label: "Setando hostname para {{ item.invocation.module_args.name }}"
-        
-    # Nota: A configuração de rede (IP estático) é mais complexa e
-    # o ideal é fazê-la via Cloud-Init durante o clone.
-    # Se você configurou seu template para usar Cloud-Init, você pode passar
-    # parâmetros `ipconfig0`, `ciuser`, `cipassword` na task de clone.
+    - name: "4. Mudar o hostname dentro da VM"
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+      become: true 
