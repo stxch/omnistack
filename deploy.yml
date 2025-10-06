@@ -4,24 +4,26 @@
   gather_facts: false
   
   vars:
-    proxmox_node_name: "pve-main" # Defina aqui o nome do seu node Proxmox
+    proxmox_node_name: "pve-main"
 
   tasks:
     - name: "Executar a role 'deploy-vm' para criar as máquinas"
       ansible.builtin.include_role:
         name: "roles/deploy-vm"
-      # Executa a role uma vez para cada VM a ser criada
+      # Passa a variável 'item' do loop para a role com o nome 'loop_index'
+      vars:
+        loop_index: "{{ item }}"
       loop: "{{ range(0, vm_count | int) | list }}"
-      register: creation_results # Registra o resultado de cada loop
+      register: creation_results
 
     - name: "Adicionar todas as novas VMs ao grupo 'novas_vms'"
       ansible.builtin.add_host:
-        name: "{{ item.new_vm_name }}"
+        name: "{{ item.invocation.module_args.name }}"
         groups: novas_vms
-        ansible_host: "{{ item.ip_address }}"
-      loop: "{{ creation_results.results | map(attribute='ansible_facts') | list }}"
-      when: item.ip_address is defined
-
+        ansible_host: "{{ item.ansible_facts.ip_address }}"
+      # Ajuste no loop para extrair os dados corretamente
+      loop: "{{ creation_results.results }}"
+      when: item.ansible_facts.ip_address is defined
 
 - name: "PLAY 2: Configurar as VMs recém-criadas"
   hosts: novas_vms # Agora este grupo terá os servidores corretos

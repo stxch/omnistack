@@ -5,7 +5,7 @@
     api_password: "{{ lookup('env', 'proxmox_api_secret') }}"
     api_host: "{{ lookup('env', 'proxmox_api_host') }}"
   register: proxmox_info
-  run_once: true # Executa esta tarefa apenas uma vez, mesmo em um loop
+  run_once: true
 
 - name: "Calcular o próximo VMID disponível"
   ansible.builtin.set_fact:
@@ -13,32 +13,24 @@
     next_vmid: "{{ (existing_vmids | select('>=', vmid_range_start) | max | default(vmid_range_start - 1)) + 1 }}"
   run_once: true
 
-- name: "[CRIAR] Clonar e configurar a VM {{ vm_name_prefix }}-{{ item + 1 }}"
+- name: "[CRIAR] Clonar e configurar a VM {{ vm_name_prefix }}-{{ loop_index + 1 }}"
   community.general.proxmox_kvm:
     api_user: "{{ lookup('env', 'proxmox_api_user') }}"
     api_password: "{{ lookup('env', 'proxmox_api_secret') }}"
     api_host: "{{ lookup('env', 'proxmox_api_host') }}"
     node: "{{ proxmox_node_name }}"
     
-    vmid: "{{ next_vmid | int + item }}"
-    name: "{{ vm_name_prefix }}-{{ item + 1 }}"
+    vmid: "{{ next_vmid | int + loop_index }}"
+    name: "{{ vm_name_prefix }}-{{ loop_index + 1 }}"
     clone: "{{ template_name }}"
     
     cores: "{{ default_vm_cores }}"
     memory: "{{ default_vm_memory }}"
     
-    # Configuração do Cloud-Init para usuário e senha
     ciuser: "{{ default_vm_user }}"
     cipassword: "{{ default_vm_password }}"
-    ipconfig0: "ip=dhcp" # Garante que a VM pegue IP via DHCP
+    ipconfig0: "ip=dhcp"
     
     state: started
     timeout: 300
   register: vm_info
-
-- name: "Adicionar a nova VM ao inventário em memória"
-  ansible.builtin.add_host:
-    name: "{{ vm_info.new_vm_name }}"
-    groups: novas_vms
-    ansible_host: "{{ vm_info.ip_address }}" # Usa o IP retornado pelo proxmox_kvm
-  when: vm_info.ip_address is defined
