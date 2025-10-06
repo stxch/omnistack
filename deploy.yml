@@ -4,10 +4,6 @@
   gather_facts: false
   
   vars:
-    # Estas variáveis serão preenchidas pelas 'Survey Variables' do Semaphore
-    # - vm_count
-    # - vm_name_prefix
-    # - template_name
     proxmox_node_name: "pve-main" # Defina aqui o nome do seu node Proxmox
 
   tasks:
@@ -16,10 +12,19 @@
         name: "roles/deploy-vm"
       # Executa a role uma vez para cada VM a ser criada
       loop: "{{ range(0, vm_count | int) | list }}"
+      register: creation_results # Registra o resultado de cada loop
+
+    - name: "Adicionar todas as novas VMs ao grupo 'novas_vms'"
+      ansible.builtin.add_host:
+        name: "{{ item.new_vm_name }}"
+        groups: novas_vms
+        ansible_host: "{{ item.ip_address }}"
+      loop: "{{ creation_results.results | map(attribute='ansible_facts') | list }}"
+      when: item.ip_address is defined
 
 
 - name: "PLAY 2: Configurar as VMs recém-criadas"
-  hosts: novas_vms # Alvo são as VMs que acabamos de adicionar em memória
+  hosts: novas_vms # Agora este grupo terá os servidores corretos
   gather_facts: false
   
   tasks:
@@ -36,10 +41,10 @@
         name: "{{ inventory_hostname }}"
       become: true
 
-    - name: "Enviar notificação final (exemplo)"
+    - name: "VM Criada com Sucesso!"
       ansible.builtin.debug:
         msg: |
-          VM '{{ inventory_hostname }}' criada com sucesso!
+          VM '{{ inventory_hostname }}' provisionada e configurada!
           IP: {{ ansible_default_ipv4.address }}
           OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
       delegate_to: localhost
