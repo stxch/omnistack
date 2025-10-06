@@ -44,8 +44,8 @@
 
 - name: "Configurar as VMs recém-criadas"
   hosts: novas_vms
-  gather_facts: no
-  
+  gather_facts: false
+
   tasks:
     - name: "3. Aguardar o SSH estar disponível"
       ansible.builtin.wait_for_connection:
