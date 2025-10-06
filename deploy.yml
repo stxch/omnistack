@@ -1,58 +1,45 @@
 ---
-- name: "Deploy e Configuração de VMs no Proxmox"
+- name: "PLAY 1: Provisionar infraestrutura no Proxmox"
   hosts: localhost
   gather_facts: false
-
-  pre_tasks:
-    - name: "Descobrir o próximo VMID livre"
-      community.general.proxmox_facts:
-        api_user: "{{ lookup('env', 'proxmox_api_user') }}"
-        api_password: "{{ lookup('env', 'proxmox_api_secret') }}"
-        api_host: "{{ lookup('env', 'proxmox_api_host') }}"
-      register: proxmox_info
-
-    - name: "Calcular o próximo VMID a partir de 700"
-      ansible.builtin.set_fact:
-        vmid_range_start: 700
-        existing_vmids: "{{ proxmox_info.proxmox_vms | map(attribute='vmid') | list }}"
-        next_vmid: "{{ (existing_vmids | select('>=', vmid_range_start) | max | default(vmid_range_start - 1)) + 1 }}"
+  
+  vars:
+    # Estas variáveis serão preenchidas pelas 'Survey Variables' do Semaphore
+    # - vm_count
+    # - vm_name_prefix
+    # - template_name
+    proxmox_node_name: "pve-main" # Defina aqui o nome do seu node Proxmox
 
   tasks:
-    - name: "1. Clonar e configurar as VMs"
-      community.general.proxmox_kvm:
-        api_user: "{{ lookup('env', 'proxmox_api_user') }}"
-        api_password: "{{ lookup('env', 'proxmox_api_secret') }}"
-        api_host: "{{ lookup('env', 'proxmox_api_host') }}"
-        node: "pve-main"
-        vmid: "{{ next_vmid | int + item }}"
-        name: "{{ vm_name_prefix }}-{{ item + 1 }}"
-        clone: "{{ template_name }}"
-        cores: 2
-        memory: 2048
-        state: started
-        timeout: 300
+    - name: "Executar a role 'deploy-vm' para criar as máquinas"
+      ansible.builtin.include_role:
+        name: "roles/deploy-vm"
+      # Executa a role uma vez para cada VM a ser criada
       loop: "{{ range(0, vm_count | int) | list }}"
-      register: vm_creation_results
 
-    - name: "2. Adicionar novas VMs ao inventário em memória"
-      ansible.builtin.add_host:
-        name: "{{ item.invocation.module_args.name }}"
-        groups: novas_vms
-      loop: "{{ vm_creation_results.results }}"
-      loop_control:
-        label: "{{ item.invocation.module_args.name }}"
 
-- name: "Configurar as VMs recém-criadas"
-  hosts: novas_vms
+- name: "PLAY 2: Configurar as VMs recém-criadas"
+  hosts: novas_vms # Alvo são as VMs que acabamos de adicionar em memória
   gather_facts: false
-
+  
   tasks:
-    - name: "3. Aguardar o SSH estar disponível"
+    - name: "Aguardar o SSH estar disponível"
       ansible.builtin.wait_for_connection:
         delay: 10
         timeout: 300
 
-    - name: "4. Mudar o hostname dentro da VM"
+    - name: "Coletar fatos das novas VMs"
+      ansible.builtin.gather_facts:
+
+    - name: "Definir o hostname dentro da VM"
       ansible.builtin.hostname:
         name: "{{ inventory_hostname }}"
       become: true
+
+    - name: "Enviar notificação final (exemplo)"
+      ansible.builtin.debug:
+        msg: |
+          VM '{{ inventory_hostname }}' criada com sucesso!
+          IP: {{ ansible_default_ipv4.address }}
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+      delegate_to: localhost

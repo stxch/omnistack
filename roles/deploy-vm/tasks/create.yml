@@ -1,0 +1,44 @@
+---
+- name: "Descobrir o próximo VMID livre"
+  community.general.proxmox_facts:
+    api_user: "{{ lookup('env', 'proxmox_api_user') }}"
+    api_password: "{{ lookup('env', 'proxmox_api_secret') }}"
+    api_host: "{{ lookup('env', 'proxmox_api_host') }}"
+  register: proxmox_info
+  run_once: true # Executa esta tarefa apenas uma vez, mesmo em um loop
+
+- name: "Calcular o próximo VMID disponível"
+  ansible.builtin.set_fact:
+    existing_vmids: "{{ proxmox_info.proxmox_vms | map(attribute='vmid') | list }}"
+    next_vmid: "{{ (existing_vmids | select('>=', vmid_range_start) | max | default(vmid_range_start - 1)) + 1 }}"
+  run_once: true
+
+- name: "[CRIAR] Clonar e configurar a VM {{ vm_name_prefix }}-{{ item + 1 }}"
+  community.general.proxmox_kvm:
+    api_user: "{{ lookup('env', 'proxmox_api_user') }}"
+    api_password: "{{ lookup('env', 'proxmox_api_secret') }}"
+    api_host: "{{ lookup('env', 'proxmox_api_host') }}"
+    node: "{{ proxmox_node_name }}"
+    
+    vmid: "{{ next_vmid | int + item }}"
+    name: "{{ vm_name_prefix }}-{{ item + 1 }}"
+    clone: "{{ template_name }}"
+    
+    cores: "{{ default_vm_cores }}"
+    memory: "{{ default_vm_memory }}"
+    
+    # Configuração do Cloud-Init para usuário e senha
+    ciuser: "{{ default_vm_user }}"
+    cipassword: "{{ default_vm_password }}"
+    ipconfig0: "ip=dhcp" # Garante que a VM pegue IP via DHCP
+    
+    state: started
+    timeout: 300
+  register: vm_info
+
+- name: "Adicionar a nova VM ao inventário em memória"
+  ansible.builtin.add_host:
+    name: "{{ vm_info.new_vm_name }}"
+    groups: novas_vms
+    ansible_host: "{{ vm_info.ip_address }}" # Usa o IP retornado pelo proxmox_kvm
+  when: vm_info.ip_address is defined

@@ -1,0 +1,4 @@
+---
+# tasks file for deploy-vm
+- name: "Incluir tarefas de criação de VM"
+  ansible.builtin.include_tasks: create.yml
