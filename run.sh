@@ -1,12 +1,13 @@
 #!/bin/bash
 set -e
 
-# GARANTE QUE ESTAMOS NO DIRETÓRIO CERTO
-cd /tmp/semaphore/project_1/repository_*
+# CORREÇÃO: Encontra o diretório de trabalho correto e entra nele
+WORKDIR=$(find /tmp/semaphore/ -maxdepth 1 -type d -name "repository_*" | head -n 1)
+cd "$WORKDIR"
 
 # --- ETAPA 1: PREPARAÇÃO DO AMBIENTE ---
 echo "==> Etapa 1: Instalando dependências..."
-ansible-galaxy collection install -r requirements.yml # Agora aponta para o arquivo na raiz
+ansible-galaxy collection install -r requirements.yml
 pip install -r requirements.txt
 
 # --- ETAPA 2: EXECUÇÃO DA AUTOMAÇÃO ---
