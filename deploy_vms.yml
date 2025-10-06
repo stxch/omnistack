@@ -8,7 +8,7 @@
       community.general.proxmox_kvm:
         api_user: "{{ lookup('env', 'proxmox_api_user') }}"
         api_password: "{{ lookup('env', 'proxmox_api_secret') }}"
-        api_host: "{{ proxmox_api_host }}" 
+        api_host: "{{ lookup('env', 'proxmox_api_host') }}" 
         node: "pve-main"
         
         vmid: "{{ vmid_start | int + item }}"
