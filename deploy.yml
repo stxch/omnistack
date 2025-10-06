@@ -1,32 +1,60 @@
 ---
-- name: "PLAY 1: Provisionar infraestrutura no Proxmox"
+- name: "Provisionar e Configurar VMs no ProxMox"
   hosts: localhost
   gather_facts: false
   
   vars:
     proxmox_node_name: "pve-main"
+    vmid_range_start: 700
+    default_vm_cores: 2
+    default_vm_memory: 2048
+    default_vm_user: "padrao"
+    default_vm_password: "ijo1Epaing5"
 
   tasks:
-    - name: "Executar a role 'deploy-vm' para criar as máquinas"
-      ansible.builtin.include_role:
-        name: "roles/deploy-vm"
-      # Passa a variável 'item' do loop para a role com o nome 'loop_index'
-      vars:
-        loop_index: "{{ item }}"
+    - name: "Descobrir o próximo VMID livre"
+      community.general.proxmox_facts:
+        api_user: "{{ lookup('env', 'proxmox_api_user') }}"
+        api_password: "{{ lookup('env', 'proxmox_api_secret') }}"
+        api_host: "{{ lookup('env', 'proxmox_api_host') }}"
+      register: proxmox_info
+      run_once: true
+
+    - name: "Calcular o próximo VMID disponível"
+      ansible.builtin.set_fact:
+        existing_vmids: "{{ proxmox_info.proxmox_vms | map(attribute='vmid') | list }}"
+        next_vmid: "{{ (existing_vmids | select('>=', vmid_range_start) | max | default(vmid_range_start - 1)) + 1 }}"
+      run_once: true
+
+    - name: "[CRIAR] Clonar e configurar a VM {{ vm_name_prefix }}-{{ item + 1 }}"
+      community.general.proxmox_kvm:
+        api_user: "{{ lookup('env', 'proxmox_api_user') }}"
+        api_password: "{{ lookup('env', 'proxmox_api_secret') }}"
+        api_host: "{{ lookup('env', 'proxmox_api_host') }}"
+        node: "{{ proxmox_node_name }}"
+        vmid: "{{ next_vmid | int + item }}"
+        name: "{{ vm_name_prefix }}-{{ item + 1 }}"
+        clone: "{{ template_name }}"
+        cores: "{{ default_vm_cores }}"
+        memory: "{{ default_vm_memory }}"
+        ciuser: "{{ default_vm_user }}"
+        cipassword: "{{ default_vm_password }}"
+        ipconfig0: "ip=dhcp"
+        state: started
+        timeout: 300
       loop: "{{ range(0, vm_count | int) | list }}"
       register: creation_results
 
-    - name: "Adicionar todas as novas VMs ao grupo 'novas_vms'"
+    - name: "Adicionar novas VMs ao grupo 'novas_vms'"
       ansible.builtin.add_host:
         name: "{{ item.invocation.module_args.name }}"
         groups: novas_vms
         ansible_host: "{{ item.ansible_facts.ip_address }}"
-      # Ajuste no loop para extrair os dados corretamente
       loop: "{{ creation_results.results }}"
       when: item.ansible_facts.ip_address is defined
 
 - name: "PLAY 2: Configurar as VMs recém-criadas"
-  hosts: novas_vms # Agora este grupo terá os servidores corretos
+  hosts: novas_vms
   gather_facts: false
   
   tasks:
