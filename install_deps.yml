@@ -1,0 +1,8 @@
+---
+- name: "Instalar dependências Ansible Galaxy"
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: "Instalar coleção community.general"
+      ansible.builtin.command: "ansible-galaxy collection install community.general"
+      changed_when: false

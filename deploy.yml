@@ -1,0 +1,6 @@
+---
+- name: "Instalar dependências"
+  ansible.builtin.import_playbook: install_deps.yml
+
+- name: "Executar o deploy das VMs"
+  ansible.builtin.import_playbook: run_deployment.yml
