@@ -7,11 +7,18 @@
     # --- VARIÁVEIS DE CONFIGURAÇÃO PADRÃO ---
     proxmox_node_name: "pve-main"
     vmid_range_start: 700
-    default_vm_cores: 2
-    default_vm_memory: 2048
     default_vm_user: "padrao"
     default_vm_password: "ijo1Epaing5"
+    proxmox_network_bridge: "vmbr100" # Rede definida conforme sua necessidade
     
+    # --- VARIÁVEIS DE ENTRADA (fornecidas pela Survey do AWX) ---
+    # vm_count
+    # vm_name_prefix
+    # template_name
+    # vm_description
+    # vm_cpu
+    # vm_ram
+
   pre_tasks:
     - name: "Garantir que 'proxmoxer' esteja instalado"
       ansible.builtin.pip:
@@ -25,9 +32,9 @@
         api_user: "{{ lookup('env','PROXMOX_API_USER') }}"
         api_password: "{{ lookup('env','PROXMOX_API_PASS') }}"
         api_host: "{{ lookup('env','PROXMOX_API_HOST') }}"
-        validate_certs: false   # <-- A CORREÇÃO MÁGICA
+        validate_certs: false   # <-- CORREÇÃO PARA O ERRO SSL
       register: proxmox_info
-      no_log: true # Oculta os valores sensíveis no log
+      no_log: true 
 
     - name: "Calcular o próximo VMID disponível"
       ansible.builtin.set_fact:
@@ -39,21 +46,28 @@
         api_user: "{{ lookup('env', 'PROXMOX_API_USER') }}"
         api_password: "{{ lookup('env', 'PROXMOX_API_PASS') }}"
         api_host: "{{ lookup('env', 'PROXMOX_API_HOST') }}"
-        validate_certs: false   # <-- A CORREÇÃO MÁGICA
+        validate_certs: false   # <-- CORREÇÃO PARA O ERRO SSL
+        
+        # --- Parâmetros da Survey ---
         node: "{{ proxmox_node_name }}"
-        vmid: "{{ next_vmid | int + item }}"
-        name: "{{ vm_name_prefix }}-{{ item + 1 }}"
         clone: "{{ template_name }}"
-        cores: "{{ default_vm_cores }}"
-        memory: "{{ default_vm_memory }}"
+        name: "{{ vm_name_prefix }}-{{ item + 1 }}"
+        description: "{{ vm_description }}"
+        cores: "{{ vm_cpu }}"
+        memory: "{{ vm_ram }}"
+        
+        # --- Configurações Padrão ---
+        vmid: "{{ next_vmid | int + item }}"
         ciuser: "{{ default_vm_user }}"
         cipassword: "{{ default_vm_password }}"
         ipconfig0: "ip=dhcp"
+        net0: "virtio,bridge={{ proxmox_network_bridge }}"
+        
         state: started
         timeout: 300
       loop: "{{ range(0, vm_count | int) | list }}"
       register: creation_results
-      no_log: true # Oculta os valores sensíveis no log
+      no_log: true 
 
     - name: "Adicionar novas VMs ao grupo 'novas_vms' em memória"
       ansible.builtin.add_host:
@@ -74,7 +88,7 @@
         delay: 10
         timeout: 300
 
-    - name: "Definir o hostname dentro da VM"
+    - name: "Definir o hostname dentro da VM (igual ao nome no Proxmox)"
       ansible.builtin.hostname:
         name: "{{ inventory_hostname }}"
 
