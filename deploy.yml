@@ -4,10 +4,9 @@
   gather_facts: false
   
   vars:
+    # --- VARIÁVEIS DE CONFIGURAÇÃO PADRÃO ---
     proxmox_node_name: "pve-main"
     vmid_range_start: 700
-    default_vm_cores: 2
-    default_vm_memory: 2048
     default_vm_user: "padrao"
     default_vm_password: "ijo1Epaing5"
     proxmox_network_bridge: "vmbr100"
@@ -22,9 +21,9 @@
   tasks:
     - name: "Descobrir o próximo VMID livre"
       community.proxmox.proxmox_vm_info:
-        # --- CORREÇÃO DE AUTENTICAÇÃO ---
-        api_token_id: "{{ lookup('env','PROXMOX_API_USER') }}"
-        api_token_secret: "{{ lookup('env','PROXMOX_API_PASS') }}"
+        # --- AUTENTICAÇÃO CORRETA ---
+        api_user: "{{ lookup('env','PROXMOX_API_USER') }}"
+        api_password: "{{ lookup('env','PROXMOX_API_PASS') }}"
         api_host: "{{ lookup('env','PROXMOX_API_HOST') }}"
         validate_certs: false
       register: proxmox_info
@@ -36,12 +35,13 @@
 
     - name: "[CRIAR] Clonar e configurar a VM {{ vm_name_prefix }}-{{ item + 1 }}"
       community.proxmox.proxmox_kvm:
-        # --- CORREÇÃO DE AUTENTICAÇÃO ---
-        api_token_id: "{{ lookup('env', 'PROXMOX_API_USER') }}"
-        api_token_secret: "{{ lookup('env', 'PROXMOX_API_PASS') }}"
+        # --- AUTENTICAÇÃO CORRETA ---
+        api_user: "{{ lookup('env', 'PROXMOX_API_USER') }}"
+        api_password: "{{ lookup('env', 'PROXMOX_API_PASS') }}"
         api_host: "{{ lookup('env', 'PROXMOX_API_HOST') }}"
         validate_certs: false
         
+        # --- Parâmetros da Survey ---
         node: "{{ proxmox_node_name }}"
         clone: "{{ template_name }}"
         name: "{{ vm_name_prefix }}-{{ item + 1 }}"
@@ -49,6 +49,7 @@
         cores: "{{ vm_cpu }}"
         memory: "{{ vm_ram }}"
         
+        # --- Configurações Padrão ---
         vmid: "{{ next_vmid | int + item }}"
         ciuser: "{{ default_vm_user }}"
         cipassword: "{{ default_vm_password }}"
