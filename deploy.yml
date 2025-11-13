@@ -21,7 +21,7 @@
     - name: "Descobrir o próximo VMID livre"
       community.proxmox.proxmox_vm_info:
         api_user: "{{ lookup('env','PROXMOX_API_USER') }}"
-        api_password: "{{ lookup('env','PROXMOX_API_PASS') }}"
+        api_password: "{{ my_debug_pass }}"
         api_host: "{{ lookup('env','PROXMOX_API_HOST') }}"
       register: proxmox_info
 
@@ -34,7 +34,7 @@
       # CORREÇÃO: Usando a nova coleção community.proxmox
       community.proxmox.proxmox_kvm:
         api_user: "{{ lookup('env', 'PROXMOX_API_USER') }}"
-        api_password: "{{ lookup('env', 'PROXMOX_API_PASS') }}"
+        api_password: "{{ my_debug_pass }}"
         api_host: "{{ lookup('env', 'PROXMOX_API_HOST') }}"
         node: "{{ proxmox_node_name }}"
         vmid: "{{ next_vmid | int + item }}"
