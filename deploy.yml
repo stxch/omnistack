@@ -9,16 +9,8 @@
     vmid_range_start: 700
     default_vm_user: "padrao"
     default_vm_password: "ijo1Epaing5"
-    proxmox_network_bridge: "vmbr100" # Rede definida conforme sua necessidade
+    proxmox_network_bridge: "vmbr100"
     
-    # --- VARIÁVEIS DE ENTRADA (fornecidas pela Survey do AWX) ---
-    # vm_count
-    # vm_name_prefix
-    # template_name
-    # vm_description
-    # vm_cpu
-    # vm_ram
-
   pre_tasks:
     - name: "Garantir que 'proxmoxer' esteja instalado"
       ansible.builtin.pip:
@@ -32,9 +24,9 @@
         api_user: "{{ lookup('env','PROXMOX_API_USER') }}"
         api_password: "{{ lookup('env','PROXMOX_API_PASS') }}"
         api_host: "{{ lookup('env','PROXMOX_API_HOST') }}"
-        validate_certs: false   # <-- CORREÇÃO PARA O ERRO SSL
+        validate_certs: false
       register: proxmox_info
-      no_log: true 
+      # no_log: true  <-- REMOVIDO PARA VER O ERRO
 
     - name: "Calcular o próximo VMID disponível"
       ansible.builtin.set_fact:
@@ -46,9 +38,8 @@
         api_user: "{{ lookup('env', 'PROXMOX_API_USER') }}"
         api_password: "{{ lookup('env', 'PROXMOX_API_PASS') }}"
         api_host: "{{ lookup('env', 'PROXMOX_API_HOST') }}"
-        validate_certs: false   # <-- CORREÇÃO PARA O ERRO SSL
+        validate_certs: false
         
-        # --- Parâmetros da Survey ---
         node: "{{ proxmox_node_name }}"
         clone: "{{ template_name }}"
         name: "{{ vm_name_prefix }}-{{ item + 1 }}"
@@ -56,7 +47,6 @@
         cores: "{{ vm_cpu }}"
         memory: "{{ vm_ram }}"
         
-        # --- Configurações Padrão ---
         vmid: "{{ next_vmid | int + item }}"
         ciuser: "{{ default_vm_user }}"
         cipassword: "{{ default_vm_password }}"
@@ -67,7 +57,7 @@
         timeout: 300
       loop: "{{ range(0, vm_count | int) | list }}"
       register: creation_results
-      no_log: true 
+      # no_log: true  <-- REMOVIDO PARA VER O ERRO
 
     - name: "Adicionar novas VMs ao grupo 'novas_vms' em memória"
       ansible.builtin.add_host:
