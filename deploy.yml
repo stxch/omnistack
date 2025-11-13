@@ -7,19 +7,18 @@
     # --- VARIÁVEIS DE CONFIGURAÇÃO PADRÃO ---
     proxmox_node_name: "pve-main"
     vmid_range_start: 700
-    default_vm_cores: 2
-    default_vm_memory: 2048
-    default_vm_user: "padrao"
+    # ... (o resto das suas vars) ...
     default_vm_password: "ijo1Epaing5"
     
-    # --- VARIÁVEIS DE ENTRADA (fornecidas pela Survey do AWX) ---
-    # vm_count
-    # vm_name_prefix
-    # template_name
+  pre_tasks:
+    - name: "FORÇAR Instalação da dependência Python 'proxmoxer'"
+      ansible.builtin.pip:
+        name: proxmoxer
+        state: present
+      delegate_to: localhost # Garante que rode dentro do container do AWX
 
   tasks:
     - name: "Descobrir o próximo VMID livre"
-      # CORREÇÃO: Usando a nova coleção community.proxmox
       community.proxmox.proxmox_vm_info:
         api_user: "{{ lookup('env','PROXMOX_API_USER') }}"
         api_password: "{{ lookup('env','PROXMOX_API_PASS') }}"
