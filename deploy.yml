@@ -19,15 +19,15 @@
 
   tasks:
     - name: "Descobrir o próximo VMID livre"
-      community.general.proxmox_facts:
-        api_user: "{{ lookup('env', 'PROXMOX_API_USER') }}"
-        api_password: "{{ lookup('env', 'PROXMOX_API_PASS') }}"
-        api_host: "{{ lookup('env', 'PROXMOX_API_HOST') }}"
+      community.general.proxmox_vm_info:
+        api_user: "{{ lookup('env','PROXMOX_API_USER') }}"
+        api_password: "{{ lookup('env','PROXMOX_API_PASS') }}"
+        api_host: "{{ lookup('env','PROXMOX_API_HOST') }}"
       register: proxmox_info
 
     - name: "Calcular o próximo VMID disponível"
       ansible.builtin.set_fact:
-        existing_vmids: "{{ proxmox_info.proxmox_vms | map(attribute='vmid') | list }}"
+        existing_vmids: "{{ proxmox_info.vms | map(attribute='vmid') | list }}"
         next_vmid: "{{ (existing_vmids | select('>=', vmid_range_start) | max | default(vmid_range_start - 1)) + 1 }}"
 
     - name: "[CRIAR] Clonar e configurar a VM {{ vm_name_prefix }}-{{ item + 1 }}"
