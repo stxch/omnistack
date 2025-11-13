@@ -12,14 +12,15 @@
     default_vm_user: "padrao"
     default_vm_password: "ijo1Epaing5"
     
-    # --- VARIÁVEIS DE ENTRADA (fornecidas pelo Rundeck) ---
+    # --- VARIÁVEIS DE ENTRADA (fornecidas pela Survey do AWX) ---
     # vm_count
     # vm_name_prefix
     # template_name
 
   tasks:
     - name: "Descobrir o próximo VMID livre"
-      community.general.proxmox_vm_info:
+      # CORREÇÃO: Usando a nova coleção community.proxmox
+      community.proxmox.proxmox_vm_info:
         api_user: "{{ lookup('env','PROXMOX_API_USER') }}"
         api_password: "{{ lookup('env','PROXMOX_API_PASS') }}"
         api_host: "{{ lookup('env','PROXMOX_API_HOST') }}"
@@ -31,7 +32,8 @@
         next_vmid: "{{ (existing_vmids | select('>=', vmid_range_start) | max | default(vmid_range_start - 1)) + 1 }}"
 
     - name: "[CRIAR] Clonar e configurar a VM {{ vm_name_prefix }}-{{ item + 1 }}"
-      community.general.proxmox_kvm:
+      # CORREÇÃO: Usando a nova coleção community.proxmox
+      community.proxmox.proxmox_kvm:
         api_user: "{{ lookup('env', 'PROXMOX_API_USER') }}"
         api_password: "{{ lookup('env', 'PROXMOX_API_PASS') }}"
         api_host: "{{ lookup('env', 'PROXMOX_API_HOST') }}"
@@ -53,9 +55,11 @@
       ansible.builtin.add_host:
         name: "{{ item.invocation.module_args.name }}"
         groups: novas_vms
-        ansible_host: "{{ item.ansible_facts.ip_address }}"
+        # CORREÇÃO: O IP é retornado em 'item.ip_address', não em 'item.ansible_facts'
+        ansible_host: "{{ item.ip_address }}"
       loop: "{{ creation_results.results }}"
-      when: item.ansible_facts.ip_address is defined
+      # CORREÇÃO: Condição baseada no caminho correto da variável
+      when: item.ip_address is defined
 
 - name: "PLAY 2: Configurar as VMs recém-criadas"
   hosts: novas_vms
