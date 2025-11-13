@@ -7,7 +7,9 @@
     # --- VARIÁVEIS DE CONFIGURAÇÃO PADRÃO ---
     proxmox_node_name: "pve-main"
     vmid_range_start: 700
-    # ... (o resto das suas vars) ...
+    default_vm_cores: 2
+    default_vm_memory: 2048
+    default_vm_user: "padrao"
     default_vm_password: "ijo1Epaing5"
     
   pre_tasks:
@@ -15,15 +17,27 @@
       ansible.builtin.pip:
         name: proxmoxer
         state: present
-      delegate_to: localhost # Garante que rode dentro do container do AWX
+      delegate_to: localhost
+
+    - name: "DEBUG: CUSPIR CREDENCIAIS ANTES DE USAR"
+      ansible.builtin.debug:
+        msg: |
+          ----------------------------------------------------
+          DEBUGGANDO CREDENCIAIS:
+          HOST:       "{{ my_debug_host }}"
+          USER:       "{{ my_debug_user }}"
+          PASS_TOKEN: "{{ my_debug_pass }}"
+          ----------------------------------------------------
+      no_log: false # Força a exibição
 
   tasks:
     - name: "Descobrir o próximo VMID livre"
       community.proxmox.proxmox_vm_info:
-        api_user: "{{ lookup('env','PROXMOX_API_USER') }}"
-        api_password: "{{ my_debug_pass }}"
-        api_host: "{{ lookup('env','PROXMOX_API_HOST') }}"
+        api_user: "{{ my_debug_user }}"      # <-- CORRIGIDO
+        api_password: "{{ my_debug_pass }}"  # <-- CORRIGIDO
+        api_host: "{{ my_debug_host }}"      # <-- CORRIGIDO
       register: proxmox_info
+      no_log: false # FORÇA A EXIBIÇÃO DOS ARGUMENTOS
 
     - name: "Calcular o próximo VMID disponível"
       ansible.builtin.set_fact:
@@ -31,11 +45,10 @@
         next_vmid: "{{ (existing_vmids | select('>=', vmid_range_start) | max | default(vmid_range_start - 1)) + 1 }}"
 
     - name: "[CRIAR] Clonar e configurar a VM {{ vm_name_prefix }}-{{ item + 1 }}"
-      # CORREÇÃO: Usando a nova coleção community.proxmox
       community.proxmox.proxmox_kvm:
-        api_user: "{{ lookup('env', 'PROXMOX_API_USER') }}"
-        api_password: "{{ my_debug_pass }}"
-        api_host: "{{ lookup('env', 'PROXMOX_API_HOST') }}"
+        api_user: "{{ my_debug_user }}"      # <-- CORRIGIDO
+        api_password: "{{ my_debug_pass }}"  # <-- CORRIGIDO
+        api_host: "{{ my_debug_host }}"      # <-- CORRIGIDO
         node: "{{ proxmox_node_name }}"
         vmid: "{{ next_vmid | int + item }}"
         name: "{{ vm_name_prefix }}-{{ item + 1 }}"
@@ -54,10 +67,8 @@
       ansible.builtin.add_host:
         name: "{{ item.invocation.module_args.name }}"
         groups: novas_vms
-        # CORREÇÃO: O IP é retornado em 'item.ip_address', não em 'item.ansible_facts'
         ansible_host: "{{ item.ip_address }}"
       loop: "{{ creation_results.results }}"
-      # CORREÇÃO: Condição baseada no caminho correto da variável
       when: item.ip_address is defined
 
 - name: "PLAY 2: Configurar as VMs recém-criadas"
