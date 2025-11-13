@@ -13,31 +13,21 @@
     default_vm_password: "ijo1Epaing5"
     
   pre_tasks:
-    - name: "FORÇAR Instalação da dependência Python 'proxmoxer'"
+    - name: "Garantir que 'proxmoxer' esteja instalado"
       ansible.builtin.pip:
         name: proxmoxer
         state: present
       delegate_to: localhost
 
-    - name: "DEBUG: CUSPIR CREDENCIAIS ANTES DE USAR"
-      ansible.builtin.debug:
-        msg: |
-          ----------------------------------------------------
-          DEBUGGANDO CREDENCIAIS:
-          HOST:       "{{ my_debug_host }}"
-          USER:       "{{ my_debug_user }}"
-          PASS_TOKEN: "{{ my_debug_pass }}"
-          ----------------------------------------------------
-      no_log: false # Força a exibição
-
   tasks:
     - name: "Descobrir o próximo VMID livre"
       community.proxmox.proxmox_vm_info:
-        api_user: "{{ my_debug_user }}"      # <-- CORRIGIDO
-        api_password: "{{ my_debug_pass }}"  # <-- CORRIGIDO
-        api_host: "{{ my_debug_host }}"      # <-- CORRIGIDO
+        api_user: "{{ lookup('env','PROXMOX_API_USER') }}"
+        api_password: "{{ lookup('env','PROXMOX_API_PASS') }}"
+        api_host: "{{ lookup('env','PROXMOX_API_HOST') }}"
+        validate_certs: false   # <-- A CORREÇÃO MÁGICA
       register: proxmox_info
-      no_log: false # FORÇA A EXIBIÇÃO DOS ARGUMENTOS
+      no_log: true # Oculta os valores sensíveis no log
 
     - name: "Calcular o próximo VMID disponível"
       ansible.builtin.set_fact:
@@ -46,9 +36,10 @@
 
     - name: "[CRIAR] Clonar e configurar a VM {{ vm_name_prefix }}-{{ item + 1 }}"
       community.proxmox.proxmox_kvm:
-        api_user: "{{ my_debug_user }}"      # <-- CORRIGIDO
-        api_password: "{{ my_debug_pass }}"  # <-- CORRIGIDO
-        api_host: "{{ my_debug_host }}"      # <-- CORRIGIDO
+        api_user: "{{ lookup('env', 'PROXMOX_API_USER') }}"
+        api_password: "{{ lookup('env', 'PROXMOX_API_PASS') }}"
+        api_host: "{{ lookup('env', 'PROXMOX_API_HOST') }}"
+        validate_certs: false   # <-- A CORREÇÃO MÁGICA
         node: "{{ proxmox_node_name }}"
         vmid: "{{ next_vmid | int + item }}"
         name: "{{ vm_name_prefix }}-{{ item + 1 }}"
@@ -62,6 +53,7 @@
         timeout: 300
       loop: "{{ range(0, vm_count | int) | list }}"
       register: creation_results
+      no_log: true # Oculta os valores sensíveis no log
 
     - name: "Adicionar novas VMs ao grupo 'novas_vms' em memória"
       ansible.builtin.add_host:
